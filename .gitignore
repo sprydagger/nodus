@@ -229,3 +229,14 @@ notes/Nodus/.obsidian/updates.json
 notes/Nodus/.obsidian/plugins/*/cache/
 notes/Nodus/.obsidian/plugins/*/.cache/
 notes/Nodus/.obsidian/plugins/*/node_modules/
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+!*.code-workspace
+
+# Built Visual Studio Code Extensions
+*.vsix
