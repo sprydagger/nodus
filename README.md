@@ -1,0 +1,1 @@
+this is to eventually be a cool space economy spreadsheet simulator inspired by EVE Online, Elite: Dangerous, and Prosperous Universe. 
