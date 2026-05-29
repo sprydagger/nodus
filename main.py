@@ -1,9 +1,10 @@
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+from scipy.spatial import KDTree
 import numpy as np
 import random
-from time import sleep
 import networkx as nx
-import matplotlib.animation as animation
+# from time import sleep
 
 
 universe = nx.Graph()
@@ -17,7 +18,7 @@ for i in range(50):
     )
 
 
-def update_edges():
+def update_edge_distances():
     for u, v in universe.edges:
         universe.edges[u, v]['distance'] = np.linalg.norm(
             universe.nodes[u]['pos'] - universe.nodes[v]['pos']
@@ -43,18 +44,47 @@ def draw_graph(ax):
     ax.set_title('Universe Nodes and Connections')
     ax.set_xlim(-15, 15)
     ax.set_ylim(-15, 15)
-    ax.set_zlim(-3, 3)
+    ax.set_zlim(-15, 15)
 
 
-# TODO: generate edges
-update_edges()
+def generate_starting_edges():
+    positions = [universe.nodes[n]["pos"] for n in universe.nodes]
+    tree = KDTree(positions)
+    for node in universe.nodes:
+        distances, indices = tree.query(universe.nodes[node]['pos'], k=4)  # Includes the node itself
+        for i in range(1, 4):  # Skip the node itself
+            neighbor = list(universe.nodes)[indices[i]]
+            if not universe.has_edge(node, neighbor):
+                universe.add_edge(node, neighbor)
+
+
+generate_starting_edges()
+update_edge_distances()
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
 
 def animate(frame):
+    # update model
     tick()
-    draw_graph(ax)
+    # update scatter
+    xs = [universe.nodes[n]['pos'][0] for n in universe.nodes]
+    ys = [universe.nodes[n]['pos'][1] for n in universe.nodes]
+    zs = [universe.nodes[n]['pos'][2] for n in universe.nodes]
+    scat._offsets3d = (xs, ys, zs)
+
+    # update Line3DCollection segments
+    segments = [
+        [
+            [universe.nodes[u]['pos'][0], universe.nodes[u]['pos'][1], universe.nodes[u]['pos'][2]],
+            [universe.nodes[v]['pos'][0], universe.nodes[v]['pos'][1], universe.nodes[v]['pos'][2]],
+        ]
+        for u, v in edges_list
+    ]
+    coll.set_segments(segments)
+
+    return (scat, coll)
+
 
 def tick():
     center = np.array([0.0, 0.0, 0.0])
@@ -68,10 +98,43 @@ def tick():
         if universe.nodes[node]['stability'] <= 0.3:
             universe.nodes[node]['pos'] += np.random.uniform(-0.1, 0.1, 3)
             universe.nodes[node]['stability'] = 1
-    update_edges()
+    update_edge_distances()
 
-anim = animation.FuncAnimation(fig, animate, frames=300, interval=1)
-anim.save('universe.gif', writer='pillow')
+
+# prepare persistent artists for blitting (use a single Line3DCollection for all edges)
+from mpl_toolkits.mplot3d.art3d import Line3DCollection
+
+edges_list = list(universe.edges)
+xs = [universe.nodes[n]['pos'][0] for n in universe.nodes]
+ys = [universe.nodes[n]['pos'][1] for n in universe.nodes]
+zs = [universe.nodes[n]['pos'][2] for n in universe.nodes]
+
+scat = ax.scatter(xs, ys, zs, c='blue', s=10)
+
+# build segments for the collection: each segment is [[x1,y1,z1], [x2,y2,z2]]
+segments = [
+    [
+        [universe.nodes[u]['pos'][0], universe.nodes[u]['pos'][1], universe.nodes[u]['pos'][2]],
+        [universe.nodes[v]['pos'][0], universe.nodes[v]['pos'][1], universe.nodes[v]['pos'][2]],
+    ]
+    for u, v in edges_list
+]
+
+coll = Line3DCollection(segments, colors='gray', alpha=0.5)
+ax.add_collection3d(coll)
+
+
+def init():
+    return (scat, coll)
+
+
+anim = animation.FuncAnimation(fig, animate, init_func=init, frames=300, interval=1, blit=True)
+
+# Save with ffmpeg for faster encoding; if ffmpeg not available, fallback to pillow GIF
+try:
+    anim.save('universe.mp4', writer='ffmpeg', dpi=80, fps=10)
+except Exception:
+    anim.save('universe.gif', writer='pillow')
 
 # while True:
 #     tick()
