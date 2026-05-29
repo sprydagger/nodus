@@ -1,4 +1,6 @@
 from collections import Counter
+import uuid
+import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from scipy.spatial import KDTree
@@ -22,9 +24,16 @@ for i in range(100):
         contest_pressure=0.0,
     )
 
-universe.nodes[0]["owner"] = "019e7403-3c72-7ce4-81ac-e452b0e60d6b"
-universe.nodes[10]["owner"] = "019e7403-9ecb-758d-8a34-efad0f72acbf"
-universe.nodes[20]["owner"] = "019e7403-b8b5-7c36-84e9-cdaa9266dcf4"
+corporations = []
+
+for i in range(10):
+    corporations.append(uuid.uuid4())
+    universe.nodes[i]["owner"] = corporations[i]
+
+corp_colors = {
+    corp: mcolors.to_hex(plt.colormaps["tab10"](i / 10))
+    for i, corp in enumerate(corporations)
+}
 
 
 def update_edge_distances():
@@ -51,14 +60,8 @@ def draw_graph(ax):
             colors.append("yellow")
         elif node_data["owner"] is None:
             colors.append("gray")
-        elif node_data["owner"] == "019e7403-3c72-7ce4-81ac-e452b0e60d6b":
-            colors.append("red")
-        elif node_data["owner"] == "019e7403-9ecb-758d-8a34-efad0f72acbf":
-            colors.append("blue")
-        elif node_data["owner"] == "019e7403-b8b5-7c36-84e9-cdaa9266dcf4":
-            colors.append("green")
         else:
-            colors.append("white")
+            colors.append(corp_colors.get(node_data["owner"], "white"))
 
     ax.scatter(xs, ys, zs, c=colors, s=50)
     for u, v in universe.edges:
@@ -220,6 +223,7 @@ def tick():
 
 
 def print_sovereignty():
+    print("Sovereignty:")
     owners = Counter(universe.nodes[n]["owner"] for n in universe.nodes)
     for owner, count in owners.items():
         print(f"{owner}: {count} nodes")
