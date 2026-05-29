@@ -9,7 +9,7 @@ import networkx as nx
 
 
 universe = nx.Graph()
-for i in range(50):
+for i in range(500):
     universe.add_node(
         i,
         pos=np.array([random.gauss(0, 5), random.gauss(0, 5), random.gauss(0, 1)]),
@@ -18,7 +18,6 @@ for i in range(50):
         stability=1,
         owner=None,
     )
-    universe.nodes[i]["home"] = universe.nodes[i]["pos"].copy()
 
 
 def update_edge_distances():
@@ -55,7 +54,7 @@ def generate_starting_edges():
     nodes = list(universe.nodes)
     tree = KDTree(positions)
     for node in nodes:
-        k = min(4, len(nodes))
+        k = min(6, len(nodes))
         distances, indices = tree.query(universe.nodes[node]["pos"], k=k)
         indices = np.atleast_1d(indices)
         for i in range(1, len(indices)):
@@ -63,9 +62,6 @@ def generate_starting_edges():
             if not universe.has_edge(node, neighbor):
                 universe.add_edge(node, neighbor)
 
-
-generate_starting_edges()
-update_edge_distances()
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection="3d")
@@ -78,21 +74,37 @@ def animate(frame):
 
 
 def tick():
+    center = np.array([0.0, 0.0, 0.0])
     for node in universe.nodes:
         pos = universe.nodes[node]["pos"]
-        r = pos - universe.nodes[node]["home"]
+        vel = universe.nodes[node]["vel"].astype(float)
+        r = pos - center
         weight = 1 - np.exp(-(np.linalg.norm(r) ** 2) / 80.0)
-        curl = np.array([-r[1], r[0], 0]) * 0.05 * weight
-        home_pull = (universe.nodes[node]["home"] - pos) * 0.02
-        universe.nodes[node]["pos"] += home_pull
-        universe.nodes[node]["pos"] += curl
+        universe.nodes[node]["home"] += np.random.uniform(-0.1, 0.1, 3)
+        home_pull = (universe.nodes[node]["home"] - pos) * 0.015
+        curl = np.array([-r[1], r[0], 0]) * 0.005 * weight
+        vel += curl + home_pull
+        vel *= 0.85
+        universe.nodes[node]["vel"] = vel
+        universe.nodes[node]["pos"] += vel
         universe.nodes[node]["stability"] -= random.uniform(0.01, 0.1)
-        if universe.nodes[node]["stability"] <= 0.3:
-            universe.nodes[node]["pos"] += np.random.uniform(-0.1, 0.1, 3)
-            universe.nodes[node]["stability"] = 1
+        if universe.nodes[node]["stability"] < 0.6:
+            universe.nodes[node]["home"] += np.random.uniform(-0.05, 0.05, 3)
     update_edge_distances()
+
+    for u, v in universe.edges:
+        u_pos = universe.nodes[u]["pos"]
+        v_pos = universe.nodes[v]["pos"]
+        diff = v_pos - u_pos
+        unit = diff / np.linalg.norm(diff)
+        universe.nodes[u]["vel"] += unit * 0.001
+        universe.nodes[v]["vel"] -= unit * 0.001
+    update_edge_distances()
+
     to_remove = [
-        (u, v) for u, v in universe.edges if universe.edges[u, v]["distance"] > 5
+        (u, v)
+        for u, v in universe.edges
+        if universe.edges[u, v]["distance"] > prune_threshold
     ]
     for u, v in to_remove:
         universe.remove_edge(u, v)
@@ -105,6 +117,25 @@ def print_sovereignty():
 
 
 print_sovereignty()
+
+# presim
+for i in range(200):
+    for node in universe.nodes:
+        pos = universe.nodes[node]["pos"]
+        r = pos - np.array([0.0, 0.0, 0.0])
+        weight = 1 - np.exp(-(np.linalg.norm(r) ** 2) / 80.0)
+        curl = np.array([-r[1], r[0], 0]) * 0.005 * weight
+        universe.nodes[node]["pos"] += curl
+        universe.nodes[node]["pos"] += np.random.uniform(-0.1, 0.1, 3)
+
+for node in universe.nodes:
+    universe.nodes[node]["home"] = universe.nodes[node]["pos"].copy()
+
+generate_starting_edges()
+update_edge_distances()
+
+avg_distance = np.mean([universe.edges[u, v]["distance"] for u, v in universe.edges])
+prune_threshold = avg_distance * 2
 
 scat = ax.scatter([], [], c="blue", s=5)
 
