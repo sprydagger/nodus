@@ -17,6 +17,9 @@ for i in range(100):
         vel=np.zeros(3, dtype=float),
         stability=1,
         owner=None,
+        contested=False,
+        contester=None,
+        contest_pressure=0.0,
     )
 
 universe.nodes[0]["owner"] = "019e7403-3c72-7ce4-81ac-e452b0e60d6b"
@@ -43,14 +46,16 @@ def draw_graph(ax):
 
     colors = []
     for n in universe.nodes:
-        owner = universe.nodes[n]["owner"]
-        if owner is None:
+        node_data = universe.nodes[n]
+        if node_data["contested"]:
+            colors.append("yellow")
+        elif node_data["owner"] is None:
             colors.append("gray")
-        elif owner == "019e7403-3c72-7ce4-81ac-e452b0e60d6b":
+        elif node_data["owner"] == "019e7403-3c72-7ce4-81ac-e452b0e60d6b":
             colors.append("red")
-        elif owner == "019e7403-9ecb-758d-8a34-efad0f72acbf":
+        elif node_data["owner"] == "019e7403-9ecb-758d-8a34-efad0f72acbf":
             colors.append("blue")
-        elif owner == "019e7403-b8b5-7c36-84e9-cdaa9266dcf4":
+        elif node_data["owner"] == "019e7403-b8b5-7c36-84e9-cdaa9266dcf4":
             colors.append("green")
         else:
             colors.append("white")
@@ -76,7 +81,7 @@ def generate_starting_edges():
     nodes = list(universe.nodes)
     tree = KDTree(positions)
     for node in nodes:
-        k = min(6, len(nodes))
+        k = min(6, N)
         distances, indices = tree.query(universe.nodes[node]["pos"], k=k)
         indices = np.atleast_1d(indices)
         for i in range(1, len(indices)):
@@ -117,7 +122,7 @@ def tick():
     homes += drift
     homes[:, 0] *= 0.9999
     homes[:, 1] *= 0.9999
-    homes[:, 2] *= 0.9975
+    homes[:, 2] *= 0.9995
 
     # stability
     stability -= np.random.uniform(0.01, 0.1, N)
@@ -132,15 +137,11 @@ def tick():
         universe.nodes[node]["home"] = homes[i]
         universe.nodes[node]["stability"] = stability[i]
 
-    update_edge_distances()
-
     for u, v in universe.edges:
-        u_pos = universe.nodes[u]["pos"]
-        v_pos = universe.nodes[v]["pos"]
-        diff = v_pos - u_pos
+        diff = positions[node_index[v]] - positions[node_index[u]]
         unit = diff / np.linalg.norm(diff)
-        universe.nodes[u]["vel"] += unit * 0.001
-        universe.nodes[v]["vel"] -= unit * 0.001
+        velocities[node_index[u]] += unit * 0.001
+        velocities[node_index[v]] -= unit * 0.001
     update_edge_distances()
 
     to_remove = [
@@ -151,8 +152,12 @@ def tick():
     for u, v in to_remove:
         universe.remove_edge(u, v)
 
-    # ownership logic
+    # ownership logic and building edges
+    tree = KDTree(positions)
     for node in universe.nodes:
+        node_data = universe.nodes[node]
+
+        # expansion
         if universe.nodes[node]["owner"] is not None:
             if random.random() < 0.05:
                 for neighbor in universe.neighbors(node):
@@ -161,6 +166,57 @@ def tick():
                             "owner"
                         ]
                         break
+                    elif universe.nodes[neighbor]["owner"] != node_data["owner"]:
+                        universe.nodes[neighbor]["contested"] = True
+                        universe.nodes[neighbor]["contester"] = universe.nodes[node][
+                            "owner"
+                        ]
+                        break
+        # pressure resolution
+        if node_data["contested"] and node_data["contester"] is not None:
+            attacker_corp = node_data["contester"]
+            defender_corp = node_data["owner"]
+            attackers = sum(
+                1
+                for n in universe.neighbors(node)
+                if universe.nodes[n]["owner"] == attacker_corp
+            )
+            defenders = sum(
+                1
+                for n in universe.neighbors(node)
+                if universe.nodes[n]["owner"] == defender_corp
+            )
+            total = attackers + defenders
+            if total > 0:
+                node_data["contest_pressure"] += (
+                    (attackers - defenders * 1.2) / total * np.random.normal(1, 0.2)
+                )
+            if node_data["contest_pressure"] > 1.0:
+                node_data["owner"] = attacker_corp
+                node_data["contested"] = False
+                node_data["contest_pressure"] = 0.0
+                node_data["contester"] = None
+            elif node_data["contest_pressure"] < -1.0:
+                node_data["contested"] = False
+                node_data["contest_pressure"] = 0.0
+                node_data["contester"] = None
+
+        if np.random.rand() < 0.01:
+            k = min(6, N)
+            distances, indices = tree.query(universe.nodes[node]["pos"], k=k)
+            indices = np.atleast_1d(indices)
+            for i in range(1, len(indices)):
+                neighbor = nodes_list[int(indices[i])]
+                if not universe.has_edge(node, neighbor):
+                    if (distances[i] < prune_threshold / 0.8) and (
+                        (
+                            universe.nodes[neighbor]["owner"]
+                            == universe.nodes[node]["owner"]
+                        )
+                        or (universe.nodes[neighbor]["owner"] is None)
+                    ):
+                        if universe.degree(node) < 4 and universe.degree(neighbor) < 4:
+                            universe.add_edge(node, neighbor)
 
 
 def print_sovereignty():
@@ -199,7 +255,7 @@ prune_threshold = avg_distance * 2
 scat = ax.scatter([], [], c="blue", s=5)
 
 
-for i in trange(100000, desc="Equilibrating universe"):
+for i in trange(10000, desc="Equilibrating universe"):
     tick()
     # if i % 1000 == 0:
     #     print_sovereignty()
