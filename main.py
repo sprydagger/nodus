@@ -174,7 +174,6 @@ def tick():
                         universe.nodes[neighbor]["contester"] = universe.nodes[node][
                             "owner"
                         ]
-                        break
         # pressure resolution
         if node_data["contested"] and node_data["contester"] is not None:
             attacker_corp = node_data["contester"]
@@ -211,13 +210,7 @@ def tick():
             for i in range(1, len(indices)):
                 neighbor = nodes_list[int(indices[i])]
                 if not universe.has_edge(node, neighbor):
-                    if (distances[i] < prune_threshold / 0.8) and (
-                        (
-                            universe.nodes[neighbor]["owner"]
-                            == universe.nodes[node]["owner"]
-                        )
-                        or (universe.nodes[neighbor]["owner"] is None)
-                    ):
+                    if distances[i] < prune_threshold / 0.8:
                         if universe.degree(node) < 4 and universe.degree(neighbor) < 4:
                             universe.add_edge(node, neighbor)
 
@@ -267,7 +260,7 @@ for i in trange(10000, desc="Equilibrating universe"):
     #     print_sovereignty()
 
 
-anim = animation.FuncAnimation(fig, animate, interval=33, cache_frame_data=False)
+anim = animation.FuncAnimation(fig, animate, interval=1, cache_frame_data=False)
 plt.show()
 
 # while True:
