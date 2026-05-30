@@ -227,6 +227,8 @@ def print_sovereignty():
     owners = Counter(universe.nodes[n]["owner"] for n in universe.nodes)
     for owner, count in owners.items():
         print(f"{owner}: {count} nodes")
+    contested_count = sum(1 for n in universe.nodes if universe.nodes[n]["contested"])
+    print(f"Contested nodes: {contested_count}")
 
 
 # presim
